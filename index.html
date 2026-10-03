@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Urban Jungle · Invitación especial</title>
+<!-- Vista previa para WhatsApp/Meta: reemplazá preview.jpg en el repo cuando cambies de evento -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Urban Jungle · Invitación especial">
+<meta property="og:description" content="Tocá para registrarte y generar tu invitación.">
+<meta property="og:image" content="https://urbanjungle-barpub.github.io/Invitaciones-/preview.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+:root{--v9:#0a1f14;--v8:#0f2a1c;--v7:#123521;--b:#2f6b45;--d:#e8c547;--d2:#f2d566;--t:#eaf3ec;--ts:#9cb8a6}
+*{box-sizing:border-box}html,body{margin:0}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;font-family:'Segoe UI',system-ui,sans-serif;background:radial-gradient(circle at 50% 0,var(--v7),var(--v9) 60%);color:var(--t)}
+.layout{width:100%;max-width:900px;display:flex;gap:28px;justify-content:center}
+.poster{flex:1 1 380px;max-width:420px;border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+.poster img{width:100%;height:100%;object-fit:cover;display:block}
+.card{flex:1 1 380px;max-width:420px;background:linear-gradient(180deg,var(--v8),var(--v9));border:1px solid var(--b);border-radius:22px;padding:34px 28px 30px;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+@media(max-width:760px){.layout{flex-direction:column;align-items:center;gap:20px}.poster,.card{flex:none;width:100%}}
+.logo{text-align:center}.logo img{width:70%;max-width:260px}
+.sub{text-align:center;font-size:14px;color:var(--ts);margin:8px 0 22px}.sub b{color:var(--d)}
+form{display:flex;flex-direction:column;gap:14px}
+input{width:100%;padding:14px 16px;border-radius:12px;border:1px solid var(--b);background:rgba(255,255,255,.03);color:var(--t);font-size:15px;outline:none}
+input:focus{border-color:var(--d)}
+button{width:100%;padding:15px;border:0;border-radius:12px;background:linear-gradient(180deg,var(--d2),var(--d));color:#1a1405;font-size:15px;font-weight:700;cursor:pointer}
+button:disabled{opacity:.6}button.sec{background:transparent;color:var(--t);border:1px solid var(--b);margin-top:10px}
+.err{color:#ff8a8a;font-size:12.5px;text-align:center;min-height:16px}
+#ok{display:none;text-align:center}#ok h2{color:var(--d2);font-size:19px}
+#ok p{line-height:1.7;font-size:14.5px;margin:0 0 18px}
+#prev{width:100%;border-radius:14px;border:1px solid var(--b);margin-bottom:18px}
+canvas{display:none}
+#mu{position:fixed;top:16px;right:16px;width:48px;height:48px;border-radius:50%;border:1px solid var(--b);background:var(--v8);color:var(--d);font-size:20px;padding:0}
+</style>
+</head>
+<body>
+<audio id="bg" src="musica.mp3" loop preload="auto"></audio>
+<button id="mu" type="button">🔇</button>
+
+<div class="layout">
+  <div class="poster" id="poster"><img src="portada.png" alt="Line up"></div>
+  <div class="card">
+    <div id="formScreen">
+      <div class="logo"><img src="logo.png" alt="Urban Jungle"></div>
+      <p class="sub">🔥 Estás a un clic de asegurar tu lugar.<br>Registrate y obtené tu <b>invitación especial</b> + participá por <b>sorteos y promos exclusivas</b>.</p>
+      <form id="f" autocomplete="off">
+        <input id="nombre" placeholder="Nombre y apellido" required maxlength="60">
+        <input id="tel" type="tel" placeholder="Número de teléfono" required maxlength="20">
+        <div class="err" id="err"></div>
+        <button id="btn" type="submit">Ingresar</button>
+      </form>
+    </div>
+    <div id="ok">
+      <h2>¡Listo, tu invitación está lista!</h2>
+      <p>📲 Subí la imagen a tu historia<br>🏷️ Etiquetá a <b style="color:var(--d)">@UrbanJungle.barpub</b><br>✨ ¡Nos vemos en el evento!</p>
+      <img id="prev" alt="Invitación">
+      <button id="dl">⬇️ Descargar imagen</button>
+      <button id="again" class="sec">Cargar otro invitado</button>
+    </div>
+  </div>
+</div>
+<canvas id="cv"></canvas>
+
+<script>
+/* ===== CONFIG: pegá acá la URL /exec de tu Apps Script ===== */
+const API = 'PEGAR_URL_EXEC_AQUI';
+
+/* Origen según el link:  ?o=web  |  ?o=rrpp&r=Juan  |  sin parámetros = orgánico */
+const P = new URLSearchParams(location.search);
+const ORIGEN = (P.get('o') || 'organico').toLowerCase();
+const RRPP = P.get('r') || '';
+
+const api = (action, d = {}) =>
+  fetch(API, { method: 'POST', body: JSON.stringify({ action, ...d }) }).then(r => r.json());
+
+let BOX = [0.213, 0.581, 0.577, 0.057];
+let flyerImg = null, last = null, lastName = 'invitacion.png';
+const $ = id => document.getElementById(id);
+
+// Carga la config y el flyer actual (el que subís desde el panel admin)
+(async () => {
+  try {
+    const c = await api('config');
+    if (c.box) BOX = c.box;
+    if (c.titulo) document.title = 'Urban Jungle · ' + c.titulo;
+    if (c.hasFlyer) {
+      const f = await api('flyer');
+      if (f.dataUrl) { const im = new Image(); im.onload = () => flyerImg = im; im.src = f.dataUrl; }
+    }
+  } catch (e) { console.error(e); }
+})();
+
+function generar(nombre) {
+  return new Promise((res, rej) => {
+    const t0 = Date.now();
+    (function wait() {
+      if (flyerImg) return dibujar();
+      if (Date.now() - t0 > 10000) return rej(new Error('Flyer no disponible'));
+      setTimeout(wait, 150);
+    })();
+    function dibujar() {
+      const cv = $('cv'), x = cv.getContext('2d');
+      cv.width = flyerImg.naturalWidth; cv.height = flyerImg.naturalHeight;
+      x.drawImage(flyerImg, 0, 0);
+      const bx = BOX[0] * cv.width, by = BOX[1] * cv.height, bw = BOX[2] * cv.width, bh = BOX[3] * cv.height;
+      let size = Math.floor(bh * 0.6);
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      const txt = nombre.toUpperCase();
+      do { x.font = `700 ${size}px 'Arial Black',Arial,sans-serif`; if (x.measureText(txt).width <= bw * 0.96 || size <= 14) break; size -= 2; } while (true);
+      x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = Math.max(4, size * .05); x.shadowOffsetY = Math.max(2, size * .03);
+      x.fillStyle = '#1a1405';
+      x.fillText(txt, bx + bw / 2, by + bh / 2);
+      res(cv.toDataURL('image/png'));
+    }
+  });
+}
+
+function descargar(url, name) {
+  const a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+$('f').addEventListener('submit', async e => {
+  e.preventDefault(); $('err').textContent = '';
+  const nombre = $('nombre').value.trim(), tel = $('tel').value.trim();
+  if (!nombre || !tel) { $('err').textContent = 'Completá tu nombre y teléfono.'; return; }
+  $('btn').disabled = true; $('btn').textContent = 'Generando...';
+  try {
+    const [img, r] = await Promise.all([
+      generar(nombre),
+      api('registrar', { nombre, telefono: tel, origen: ORIGEN, rrpp: RRPP })
+    ]);
+    if (r.error) throw new Error(r.error);
+    last = img; lastName = 'invitacion_' + nombre.replace(/\s+/g, '_').toLowerCase() + '.png';
+    $('prev').src = img; descargar(img, lastName);
+    $('formScreen').style.display = 'none'; $('ok').style.display = 'block'; $('poster').style.display = 'none';
+  } catch (err) {
+    console.error(err); $('err').textContent = 'Ocurrió un error. Probá de nuevo.';
+  } finally { $('btn').disabled = false; $('btn').textContent = 'Ingresar'; }
+});
+$('dl').onclick = () => last && descargar(last, lastName);
+$('again').onclick = () => {
+  $('f').reset(); $('ok').style.display = 'none'; $('formScreen').style.display = 'block'; $('poster').style.display = '';
+};
+
+/* Música */
+const bg = $('bg'), mu = $('mu'); let on = false;
+mu.onclick = () => {
+  if (on) { bg.pause(); mu.textContent = '🔇'; }
+  else { bg.volume = .5; bg.play().catch(() => {}); mu.textContent = '🔊'; }
+  on = !on;
+};
+</script>
+</body>
+</html>
