@@ -1,14 +1,15 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" translate="no">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="google" content="notranslate">
 <title>Urban Jungle · Invitación especial</title>
 <!-- Vista previa para WhatsApp/Meta: reemplazá preview.jpg en el repo cuando cambies de evento -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Urban Jungle · Invitación especial">
 <meta property="og:description" content="Tocá para registrarte y generar tu invitación.">
-<meta property="og:image" content="https://urbanjungle-barpub.github.io/Invitaciones-/preview.jpg">
+<meta property="og:image" content="https://franco2292.github.io/Proyecto-1.2/preview.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <style>
 :root{--v9:#0a1f14;--v8:#0f2a1c;--v7:#123521;--b:#2f6b45;--d:#e8c547;--d2:#f2d566;--t:#eaf3ec;--ts:#9cb8a6}
@@ -39,11 +40,11 @@ canvas{display:none}
 <button id="mu" type="button">🔇</button>
 
 <div class="layout">
-  <div class="poster" id="poster"><img src="portada.png" alt="Line up"></div>
+  <div class="poster" id="poster"><img id="imgPortada" src="portada.png" alt="Line up" onerror="this.parentElement.style.display='none'"></div>
   <div class="card">
     <div id="formScreen">
-      <div class="logo"><img src="logo.png" alt="Urban Jungle"></div>
-      <p class="sub">🔥 Estás a un clic de asegurar tu lugar.<br>Registrate y obtené tu <b>invitación especial</b> + participá por <b>sorteos y promos exclusivas</b>.</p>
+      <div class="logo"><img id="imgLogo" src="logo.png" alt="Urban Jungle" onerror="this.style.display='none'"></div>
+      <p class="sub" id="subTxt">🔥 Estás a un clic de asegurar tu lugar.<br>Registrate y obtené tu <b>invitación especial</b> + participá por <b>sorteos y promos exclusivas</b>.</p>
       <form id="f" autocomplete="off">
         <input id="nombre" placeholder="Nombre y apellido" required maxlength="60">
         <input id="tel" type="tel" placeholder="Número de teléfono" required maxlength="20">
@@ -52,10 +53,10 @@ canvas{display:none}
       </form>
     </div>
     <div id="ok">
-      <h2>¡Listo, tu invitación está lista!</h2>
-      <p>📲 Subí la imagen a tu historia<br>🏷️ Etiquetá a <b style="color:var(--d)">@UrbanJungle.barpub</b><br>✨ ¡Nos vemos en el evento!</p>
-      <img id="prev" alt="Invitación">
-      <button id="dl">⬇️ Descargar imagen</button>
+      <h2 id="okTitulo">¡Listo, ya quedaste registrado!</h2>
+      <p id="okMsg">📲 Subí la imagen a tu historia<br>🏷️ Etiquetá a <b style="color:var(--d)">@UrbanJungle.barpub</b><br>✨ ¡Nos vemos en el evento!</p>
+      <img id="prev" alt="Invitación" style="display:none">
+      <button id="dl" style="display:none">⬇️ Descargar imagen</button>
       <button id="again" class="sec">Cargar otro invitado</button>
     </div>
   </div>
@@ -63,8 +64,8 @@ canvas{display:none}
 <canvas id="cv"></canvas>
 
 <script>
-/* ===== CONFIG: pegá acá la URL /exec de tu Apps Script ===== */
-const API = 'https://script.google.com/macros/s/AKfycbyzgkoHPOZFM5HbntQlBOrTgoJ9Kq9YQkKJFqZ7hCmXDom79c5uDVz20hscOHMI0N4C/exec';
+/* ===== URL /exec de tu Apps Script ===== */
+const API = 'https://script.google.com/macros/s/AKfycbxbxnMySd2R3PCP7tbLzBG523t_PlLQMDjJDEkwI00RDd6oKG1onmR4VEffxSCVsB0/exec';
 
 /* Origen según el link:  ?o=web  |  ?o=rrpp&r=Juan  |  sin parámetros = orgánico */
 const P = new URLSearchParams(location.search);
@@ -72,48 +73,62 @@ const ORIGEN = (P.get('o') || 'organico').toLowerCase();
 const RRPP = P.get('r') || '';
 
 const api = (action, d = {}) =>
-  fetch(API, { method: 'POST', body: JSON.stringify({ action, ...d }) }).then(r => r.json());
+  fetch(API, { method: 'POST', body: JSON.stringify({ action, ...d }) })
+    .then(r => r.json())
+    .then(j => { if (j && j.error) throw new Error(j.error); return j; });
 
 let BOX = [0.213, 0.581, 0.577, 0.057];
 let flyerImg = null, last = null, lastName = 'invitacion.png';
 const $ = id => document.getElementById(id);
 
-// Carga la config y el flyer actual (el que subís desde el panel admin)
-(async () => {
+// Textos editables desde el panel
+const T = {}; let BTN = 'Ingresar';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--d)">$1</b>').replace(/\n/g, '<br>');
+
+// Promesa que se resuelve cuando el flyer está cargado (o null si no hay flyer)
+const flyerReady = (async () => {
   try {
     const c = await api('config');
     if (c.box) BOX = c.box;
     if (c.titulo) document.title = 'Urban Jungle · ' + c.titulo;
-    if (c.hasFlyer) {
-      const f = await api('flyer');
-      if (f.dataUrl) { const im = new Image(); im.onload = () => flyerImg = im; im.src = f.dataUrl; }
+    if (c.textos) {
+      Object.assign(T, c.textos);
+      if (T.sub) $('subTxt').innerHTML = fmt(T.sub);
+      if (T.btn) { BTN = T.btn; $('btn').textContent = BTN; }
     }
-  } catch (e) { console.error(e); }
+    // Portada y logo subidos desde el panel (si no hay, quedan portada.png / logo.png del repo)
+    const loadAsset = (kind, id) => api('image', { kind }).then(f => {
+      const el = $(id); el.onerror = null; el.style.display = ''; el.parentElement.style.display = ''; el.src = f.dataUrl;
+    }).catch(() => {});
+    if (c.hasPortada) loadAsset('portada', 'imgPortada');
+    if (c.hasLogo) loadAsset('logo', 'imgLogo');
+    if (!c.hasFlyer) return null;
+    const f = await api('flyer');
+    return await new Promise(res => {
+      const im = new Image();
+      im.onload = () => { flyerImg = im; res(im); };
+      im.onerror = () => res(null);
+      im.src = f.dataUrl;
+    });
+  } catch (e) { console.error('config/flyer:', e); return null; }
 })();
 
-function generar(nombre) {
-  return new Promise((res, rej) => {
-    const t0 = Date.now();
-    (function wait() {
-      if (flyerImg) return dibujar();
-      if (Date.now() - t0 > 10000) return rej(new Error('Flyer no disponible'));
-      setTimeout(wait, 150);
-    })();
-    function dibujar() {
-      const cv = $('cv'), x = cv.getContext('2d');
-      cv.width = flyerImg.naturalWidth; cv.height = flyerImg.naturalHeight;
-      x.drawImage(flyerImg, 0, 0);
-      const bx = BOX[0] * cv.width, by = BOX[1] * cv.height, bw = BOX[2] * cv.width, bh = BOX[3] * cv.height;
-      let size = Math.floor(bh * 0.6);
-      x.textAlign = 'center'; x.textBaseline = 'middle';
-      const txt = nombre.toUpperCase();
-      do { x.font = `700 ${size}px 'Arial Black',Arial,sans-serif`; if (x.measureText(txt).width <= bw * 0.96 || size <= 14) break; size -= 2; } while (true);
-      x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = Math.max(4, size * .05); x.shadowOffsetY = Math.max(2, size * .03);
-      x.fillStyle = '#1a1405';
-      x.fillText(txt, bx + bw / 2, by + bh / 2);
-      res(cv.toDataURL('image/png'));
-    }
-  });
+async function generar(nombre) {
+  const im = await flyerReady;
+  if (!im) return null; // todavía no hay imagen cargada desde el panel
+  const cv = $('cv'), x = cv.getContext('2d');
+  cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+  x.drawImage(im, 0, 0);
+  const bx = BOX[0] * cv.width, by = BOX[1] * cv.height, bw = BOX[2] * cv.width, bh = BOX[3] * cv.height;
+  let size = Math.floor(bh * 0.6);
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  const txt = nombre.toUpperCase();
+  do { x.font = `700 ${size}px 'Arial Black',Arial,sans-serif`; if (x.measureText(txt).width <= bw * 0.96 || size <= 14) break; size -= 2; } while (true);
+  x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = Math.max(4, size * .05); x.shadowOffsetY = Math.max(2, size * .03);
+  x.fillStyle = '#1a1405';
+  x.fillText(txt, bx + bw / 2, by + bh / 2);
+  return cv.toDataURL('image/png');
 }
 
 function descargar(url, name) {
@@ -127,17 +142,29 @@ $('f').addEventListener('submit', async e => {
   if (!nombre || !tel) { $('err').textContent = 'Completá tu nombre y teléfono.'; return; }
   $('btn').disabled = true; $('btn').textContent = 'Generando...';
   try {
-    const [img, r] = await Promise.all([
-      generar(nombre),
-      api('registrar', { nombre, telefono: tel, origen: ORIGEN, rrpp: RRPP })
-    ]);
-    if (r.error) throw new Error(r.error);
-    last = img; lastName = 'invitacion_' + nombre.replace(/\s+/g, '_').toLowerCase() + '.png';
-    $('prev').src = img; descargar(img, lastName);
+    // 1) Registro (si falla, se avisa con el motivo real)
+    const reg = api('registrar', { nombre, telefono: tel, origen: ORIGEN, rrpp: RRPP });
+    // 2) Imagen (si falla o no hay flyer, el registro igual queda hecho)
+    let img = null;
+    try { img = await generar(nombre); } catch (er) { console.error('imagen:', er); }
+    await reg;
+
+    if (img) {
+      last = img; lastName = 'invitacion_' + nombre.replace(/\s+/g, '_').toLowerCase() + '.png';
+      $('prev').src = img; $('prev').style.display = 'block';
+      $('dl').style.display = 'block'; descargar(img, lastName);
+      $('okMsg').innerHTML = T.okMsg ? fmt(T.okMsg) : '📲 Subí la imagen a tu historia<br>🏷️ Etiquetá a <b style="color:var(--d)">@UrbanJungle.barpub</b><br>✨ ¡Nos vemos en el evento!';
+      $('okTitulo').textContent = T.okTitulo || '¡Listo, tu invitación está lista!';
+    } else {
+      $('prev').style.display = 'none'; $('dl').style.display = 'none';
+      $('okMsg').innerHTML = T.okMsg ? fmt(T.okMsg) : '✨ ¡Nos vemos en el evento!<br><small style="color:var(--ts)">(La imagen de invitación todavía no está disponible)</small>';
+      $('okTitulo').textContent = T.okTitulo || '¡Listo, ya quedaste registrado!';
+    }
     $('formScreen').style.display = 'none'; $('ok').style.display = 'block'; $('poster').style.display = 'none';
   } catch (err) {
-    console.error(err); $('err').textContent = 'Ocurrió un error. Probá de nuevo.';
-  } finally { $('btn').disabled = false; $('btn').textContent = 'Ingresar'; }
+    console.error(err);
+    $('err').textContent = 'No se pudo registrar: ' + (err.message || 'error de conexión');
+  } finally { $('btn').disabled = false; $('btn').textContent = BTN; }
 });
 $('dl').onclick = () => last && descargar(last, lastName);
 $('again').onclick = () => {
